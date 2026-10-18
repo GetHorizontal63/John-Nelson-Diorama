@@ -26,6 +26,9 @@ const parseXml = async (text, kind) => {
   return tg[kind](doc);
 };
 
+const GEOJSON_TYPES = ['FeatureCollection', 'Feature', 'Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection'];
+const isGeoJSON = (g) => g && GEOJSON_TYPES.includes(g.type) && !g.stac_version;
+
 // KMZ and zip archives.
 async function parseArchive(f, buf) {
   const { unzipSync, strFromU8 } = await load('fflate', FFLATE);
@@ -37,7 +40,7 @@ async function parseArchive(f, buf) {
     const text = strFromU8(files[n]);
     const e = n.split('.').pop().toLowerCase();
     const geojson = e === 'kml' || e === 'gpx' ? await parseXml(text, e) : JSON.parse(text);
-    if (geojson.features?.length === 0) continue;
+    if (!isGeoJSON(geojson) || geojson.features?.length === 0) continue;
     const label = names.length === 1 ? f.name : `${f.name} · ${n.split('/').pop()}`;
     out.push({ name: label, geojson });
   }
