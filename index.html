@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diorama Maker · Nomad Data</title>
+  <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <script>
+    // Apply the saved app theme before first paint (avoids a flash of the wrong theme).
+    try { const t = localStorage.getItem('diorama-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Cinzel&family=Raleway:wght@200;300;400;600&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+  <link href="css/style.css" rel="stylesheet">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script type="importmap">
+    { "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <!-- ======================= Full-bleed scenery: the live map ======================= -->
+  <div id="map"></div>
+  <div class="scene-veil" aria-hidden="true"></div>
+
+  <div class="shell">
+  <!-- ======================= Top bar ======================= -->
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="img/logo.png" alt="Nomad Data">
+      <span>Diorama Maker <small>&middot; cut-away maps</small></span>
+    </div>
+
+    <div class="search" data-tip="Search for a town, mountain, lake or region and the map flies there.">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="search" class="input" type="search" placeholder="Search for a place&hellip;" autocomplete="off">
+      <button id="btnSearch" class="search-go" data-tip="Search">Go</button>
+    </div>
+
+    <div class="top-actions">
+      <div class="pill sync-pill" id="statusPill" data-tip="What the app is doing right now.">
+        <span class="live"></span>
+        <span id="status" class="status-text"></span>
+        <progress id="progress" max="1" value="0" hidden></progress>
+      </div>
+      <button id="themeToggle" class="icon-btn" data-tip="Switch between dark and light mode.">
+        <svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button id="btnBuild" class="btn primary" disabled data-tip="Download elevation, imagery and water for the selected area and build the 3D model (a few seconds).">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M3 9v6l9 5 9-5V9"/></svg>Build diorama
+      </button>
+      <button id="btnExportTop" class="btn light" disabled data-tip="Save the diorama as a PNG image (size is set in the Export step).">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Export
+      </button>
+    </div>
+  </header>
+
+  <div class="workspace">
+  <!-- ======================= Settings panel ======================= -->
+  <aside id="panel" class="glass strong">
+    <nav class="steps" id="steps" aria-label="Steps">
+      <button class="step-pill active" data-step="place" data-tip="1 &middot; Place &mdash; pick the area to turn into a diorama."><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Place</span></button>
+      <button class="step-pill" data-step="detail" data-tip="2 &middot; Detail &mdash; how sharp the terrain and imagery are."><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Detail</span></button>
+      <button class="step-pill" data-step="terrain" data-tip="3 &middot; Terrain &mdash; height, water and the base of the block."><svg viewBox="0 0 24 24"><path d="M3 20l6-10 4 6 3-4 5 8H3z"/></svg><span>Terrain</span></button>
+      <button class="step-pill" data-step="style" data-tip="4 &middot; Style &mdash; imagery or topographic layers, colours, light and camera."><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 100 18c1.1 0 1.5-.8 1.5-1.6 0-1.4-1.1-1.6-1.1-2.9 0-.9.7-1.5 1.6-1.5H16a5 5 0 005-5c0-3.9-4-7-9-7z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg><span>Style</span></button>
+      <button class="step-pill" data-step="labels" data-tip="5 &middot; Labels &mdash; place names and borders from OpenStreetMap."><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><span>Labels</span></button>
+      <button class="step-pill" data-step="layers" data-tip="6 &middot; Pins &amp; shapes &mdash; your own locations, lines and areas."><svg viewBox="0 0 24 24"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/></svg><span>Pins &amp; shapes</span></button>
+      <button class="step-pill" data-step="layout" data-tip="7 &middot; Layout &mdash; title, compass, scale, locator and credits."><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span>Layout</span></button>
+      <button class="step-pill" data-step="export" data-tip="8 &middot; Export &mdash; save a high-resolution image."><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span>Export</span></button>
+    </nav>
+    <div class="panel-scroll">
+    <!-- 1 · Place -->
+    <section class="step active" data-step="place">
+      <header class="step-head">
+        <span class="step-num">Step 1 of 8</span>
+        <h2>Choose a place</h2>
+        <p>Search above, pick an example, or draw the area you want on the map.</p>
+      </header>
+
+      <div class="inset card">
+        <h3 class="dot-label">Start from an example</h3>
+        <label class="field" data-tip="Ready-made areas with a matching title, wall text and view. Pick one, then press Build.">
+          <span class="fh"><span>Example places</span></span>
+          <select id="preset"><option value="">Choose an example…</option></select>
+        </label>
+      </div>
+
+      <div class="inset card">
+        <h3 class="dot-label">Or draw your own</h3>
+        <label class="field" data-tip="The footprint of the block. 16:9 suits widescreen images; 9:16 suits phone wallpapers.">
+          <span class="fh"><span>Block shape</span></span>
+          <select id="shape" class="seg-select">
+            <option value="square">Square</option>
+            <option value="wide">16 : 9</option>
+            <option value="tall">9 : 16</option>
+          </select>
+        </label>
+        <div class="btn-row">
+          <button id="btnDraw" class="btn" data-tip="Then click and drag on the map. The area keeps the shape chosen above.">
+            <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/></svg>Draw area
+          </button>
+          <button id="btnFit" class="btn" data-tip="Use the middle of what you can currently see on the map.">
+            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>Use map view
+          </button>
+        </div>
+        <label class="field" data-tip="Turn the area to frame it the way you want. You can also drag its outline on the map, like rotating in Photoshop (hold Shift to snap to 15°).">
+          <span class="fh"><span>Rotation</span><span class="val"><output for="selAngle"></output>°</span></span>
+          <span class="inline"><input id="selAngle" type="range" min="-180" max="180" step="1" value="0"><button id="btnRotReset" class="btn sm" data-tip="Turn the area back to north-up.">Reset</button></span>
+        </label>
+        <p class="note">Tip: hover the area's edge on the map and drag to rotate it.</p>
+        <p id="selInfo" class="note">No area selected yet.</p>
+      </div>
+    </section>
+
+    <!-- 2 · Detail -->
+    <section class="step" data-step="detail">
+      <header class="step-head">
+        <span class="step-num">Step 2 of 8</span>
+        <h2>Level of detail</h2>
+        <p>Higher detail looks sharper but takes longer to build and adjust. The defaults suit most places.</p>
+      </header>
+      <div class="inset card">
+        <label class="field" data-tip="How finely the 3D surface is modelled, along the longer side. 512 is a good balance; 1024+ is sharp but makes every adjustment slower.">
+          <span class="fh"><span>Terrain detail</span></span>
+          <select id="meshRes">
+            <option value="256">256 · quick</option>
+            <option value="384">384</option>
+            <option value="512" selected>512 · balanced</option>
+            <option value="768">768</option>
+            <option value="1024">1024 · detailed</option>
+            <option value="1536">1536 · slow to adjust</option>
+            <option value="2048">2048 · very slow to adjust</option>
+          </select>
+        </label>
+        <label class="field" data-tip="Resolution of the satellite photo draped over the terrain. 8K downloads up to about a thousand image tiles.">
+          <span class="fh"><span>Imagery detail</span></span>
+          <select id="imgRes">
+            <option value="1024">About 1K</option>
+            <option value="2048">About 2K</option>
+            <option value="4096" selected>About 4K</option>
+            <option value="8192">About 8K · large download</option>
+          </select>
+        </label>
+        <label class="switch" data-tip="Removes occasional spikes and pits in the free elevation data, mostly along coastlines.">
+          <input id="clean" type="checkbox" checked><span>Clean up elevation glitches</span>
+        </label>
+      </div>
+      <details class="inset card more">
+        <summary>Use my own elevation data <small>advanced</small></summary>
+        <p class="note">Load a GeoTIFF (EPSG:4326 or 3857), e.g. NOAA lake-bed data. It replaces the built-in elevation wherever it has values.</p>
+        <label class="file-btn btn sm" data-tip="Choose a .tif elevation or bathymetry file. Rebuild afterwards to apply it.">
+          <input id="customDem" type="file" accept=".tif,.tiff"><span>Choose GeoTIFF…</span>
+        </label>
+        <div class="grid2">
+          <label class="field" data-tip="Multiply the file's values, e.g. -1 if it stores depths as positive numbers."><span class="fh"><span>Scale</span></span><input id="cdScale" type="number" value="1" step="any"></label>
+          <label class="field" data-tip="Add this many metres, e.g. a lake's surface height when the file stores depths."><span class="fh"><span>Offset (m)</span></span><input id="cdOffset" type="number" value="0" step="any"></label>
+        </div>
+        <button id="cdClear" class="btn sm">Remove file</button>
+        <p id="cdInfo" class="note"></p>
+      </details>
+    </section>
+
+    <!-- 3 · Terrain -->
+    <section class="step" data-step="terrain">
+      <header class="step-head">
+        <span class="step-num">Step 3 of 8</span>
+        <h2>Terrain &amp; water</h2>
+        <p>Shape the land and decide what counts as water. Changes update the 3D view live.</p>
+      </header>
+      <div class="inset card">
+        <h3 class="dot-label">Height</h3>
+        <label class="field" data-tip="Stretches heights so hills read clearly. Real flat places often need 10–30×; mountains look right at 2–5×.">
+          <span class="fh"><span>Height exaggeration</span><span class="val"><output for="exag"></output>×</span></span>
+          <span class="inline"><input id="exag" type="range" min="1" max="60" step="0.5" value="10"><button id="btnExagAuto" class="btn sm" data-tip="Pick a sensible exaggeration for this area.">Auto</button></span>
+        </label>
+        <label class="field" data-tip="How deep the solid base under the terrain is.">
+          <span class="fh"><span>Base thickness</span><span class="val"><output for="baseDepth"></output></span></span>
+          <input id="baseDepth" type="range" min="0.02" max="0.3" step="0.01" value="0.07">
+        </label>
+        <label class="field" data-tip="Softens noisy terrain. 0 keeps every detail.">
+          <span class="fh"><span>Smoothing</span><span class="val"><output for="smooth"></output></span></span>
+          <input id="smooth" type="range" min="0" max="4" step="1" value="0">
+        </label>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Water</h3>
+        <label class="switch" data-tip="Treat everything below sea level as sea (with real sea-floor depths where known).">
+          <input id="wOcean" type="checkbox" checked><span>Oceans &amp; seas</span>
+        </label>
+        <label class="switch" data-tip="Fill lakes and rivers from a satellite water map (1984–2021). Each lake and river gets its own water level, so rivers flow downhill.">
+          <input id="wInland" type="checkbox" checked><span>Lakes &amp; rivers</span>
+        </label>
+        <p id="waterInfo" class="note"></p>
+        <details class="more">
+          <summary>More water options</summary>
+          <label class="field" data-tip="Only count places that were water at least this often over the satellite record. Lower includes seasonal water.">
+            <span class="fh"><span>Water must be present at least</span><span class="val"><output for="wOcc"></output>% of the time</span></span>
+            <input id="wOcc" type="range" min="5" max="95" step="5" value="50">
+          </label>
+          <label class="field" data-tip="Height of the sea surface in metres. Leave at 0 unless you're imagining sea-level change.">
+            <span class="fh"><span>Sea level (m)</span></span>
+            <input id="seaLevel" type="number" step="0.5" value="0">
+          </label>
+          <label class="field" data-tip="Free elevation data often stores lakes as flat surfaces. This digs a believable bed, deeper away from shore.">
+            <span class="fh"><span>Made-up depth where unknown</span><span class="val"><output for="synth"></output> m</span></span>
+            <input id="synth" type="range" min="0" max="1000" step="10" value="0">
+          </label>
+          <label class="switch" data-tip="If the water map is off or fails to load, treat flat, dark areas as water instead.">
+            <input id="wFlat" type="checkbox"><span>Backup: detect flat, dark water</span>
+          </label>
+        </details>
+      </div>
+    </section>
+
+    <!-- 4 · Style -->
+    <section class="step" data-step="style">
+      <header class="step-head">
+        <span class="step-num">Step 4 of 8</span>
+        <h2>Style</h2>
+        <p>Choose how the diorama looks, how it's lit and where you view it from.</p>
+      </header>
+      <div class="inset card">
+        <h3 class="dot-label">Look</h3>
+        <label class="field" data-tip="Imagery: satellite photo on realistic terrain. Topographic: stacked contour layers like a laser-cut model.">
+          <span class="fh"><span>Render style</span></span>
+          <select id="renderStyle" class="seg-select">
+            <option value="imagery" selected>Imagery</option>
+            <option value="topo">Topographic layers</option>
+          </select>
+        </label>
+        <div id="topoControls" class="sub-controls" hidden>
+          <label class="field" data-tip="How many height steps the model is cut into. Fewer = bolder shelves.">
+            <span class="fh"><span>Layers</span><span class="val"><output for="topoLayers"></output> <small id="topoInterval"></small></span></span>
+            <input id="topoLayers" type="range" min="4" max="80" step="1" value="24">
+          </label>
+          <label class="field" data-tip="Smooths the terrain before cutting, removing tiny islands of layers.">
+            <span class="fh"><span>Smooth contours</span><span class="val"><output for="topoSmooth"></output></span></span>
+            <input id="topoSmooth" type="range" min="0" max="8" step="1" value="2">
+          </label>
+          <label class="field" data-tip="Monotone: one colour. Multi-colour: a palette by height. Natural: green to snow. Imagery: the satellite photo.">
+            <span class="fh"><span>Colour</span></span>
+            <select id="topoColor">
+              <option value="mono" selected>Monotone</option>
+              <option value="multi">Multi-colour</option>
+              <option value="terrain">Natural terrain</option>
+              <option value="imagery">Satellite imagery</option>
+            </select>
+          </label>
+          <label id="topoMonoRow" class="field color-field" data-tip="The colour of every layer."><span class="fh"><span>Layer colour</span></span><input id="topoMono" type="color" value="#efede8"></label>
+          <div id="topoRampRow" class="grid2" hidden>
+            <label class="field" data-tip="Colour palette from the lowest to the highest layer.">
+              <span class="fh"><span>Palette</span></span>
+              <select id="topoRamp">
+                <option value="spectral" selected>Spectral</option>
+                <option value="viridis">Viridis</option>
+                <option value="magma">Magma</option>
+                <option value="sunset">Sunset</option>
+                <option value="glacier">Glacier</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <span class="inline" id="topoCustomRow" hidden data-tip="Custom palette: lowest colour, then highest colour."><input id="topoLow" type="color" value="#20406a"><input id="topoHigh" type="color" value="#f6e7c1"></span>
+          </div>
+          <div class="grid2">
+            <label class="field" data-tip="Surface: water as a flat coloured shelf. Depth steps: the lake bed or sea floor in stepped blues. Same as land: no special colour.">
+              <span class="fh"><span>Water</span></span>
+              <select id="topoWater">
+                <option value="flat" selected>Coloured surface</option>
+                <option value="depth">Depth steps</option>
+                <option value="land">Same as land</option>
+              </select>
+            </label>
+            <label class="field color-field" data-tip="Colour used for lakes, rivers and sea."><span class="fh"><span>Water colour</span></span><input id="topoWaterColor" type="color" value="#6fa8d6"></label>
+          </div>
+        </div>
+        <details class="more">
+          <summary>Fine-tune imagery &amp; water</summary>
+          <label class="field" data-tip="How strongly water is coloured by its depth (shallow cyan to deep blue).">
+            <span class="fh"><span>Depth colouring</span><span class="val"><output for="tint"></output></span></span>
+            <input id="tint" type="range" min="0" max="1" step="0.05" value="1">
+          </label>
+          <label class="field" data-tip="How see-through the water surface is.">
+            <span class="fh"><span>Water opacity</span><span class="val"><output for="waterOpacity"></output></span></span>
+            <input id="waterOpacity" type="range" min="0" max="1" step="0.05" value="0.55">
+          </label>
+          <label class="field" data-tip="Strength of the light ripples on the water surface.">
+            <span class="fh"><span>Ripples</span><span class="val"><output for="ripple"></output></span></span>
+            <input id="ripple" type="range" min="0" max="1" step="0.05" value="0.4">
+          </label>
+          <label class="field" data-tip="Shading painted into the imagery that brings out ridges and valleys.">
+            <span class="fh"><span>Relief shading</span><span class="val"><output for="hs"></output></span></span>
+            <input id="hs" type="range" min="0" max="2" step="0.1" value="1">
+          </label>
+          <div class="grid2">
+            <label class="field" data-tip="Colour intensity of the imagery.">
+              <span class="fh"><span>Saturation</span><span class="val"><output for="sat"></output></span></span>
+              <input id="sat" type="range" min="0.5" max="1.8" step="0.05" value="1.15">
+            </label>
+            <label class="field" data-tip="Difference between light and dark in the imagery.">
+              <span class="fh"><span>Contrast</span><span class="val"><output for="contrast"></output></span></span>
+              <input id="contrast" type="range" min="0.7" max="1.5" step="0.05" value="1.1">
+            </label>
+          </div>
+        </details>
+      </div>
+
+      <div class="inset card">
+        <h3 class="dot-label">Side walls</h3>
+        <label class="field" data-tip="Rock texture on the cut-away sides of the block (imagery style). Topographic layers use plain walls.">
+          <span class="fh"><span>Rock</span></span>
+          <select id="theme"></select>
+        </label>
+        <label class="switch" data-tip="Tint the side walls with your own colour instead of the rock's natural colours.">
+          <input id="wallTintOn" type="checkbox"><span>Custom wall colour</span>
+        </label>
+        <label class="field color-field" id="wallTintRow" hidden data-tip="Colour for the side walls. On rock it tints the texture; on topographic layers it replaces the plain wall colour.">
+          <span class="fh"><span>Wall colour</span></span>
+          <input id="wallTint" type="color" value="#c8643c">
+        </label>
+      </div>
+
+      <div class="inset card">
+        <h3 class="dot-label">Light &amp; shadows</h3>
+        <label class="field" data-tip="Follows the view: the light moves with you so the front stays lit. Fixed sun: you set its direction.">
+          <span class="fh"><span>Sun</span></span>
+          <select id="lightMode" class="seg-select">
+            <option value="follow" selected>Follows view</option>
+            <option value="fixed">Fixed</option>
+          </select>
+        </label>
+        <div id="lightFixed" class="grid2" hidden>
+          <label class="field" data-tip="Compass direction the sunlight comes from (315° = from the northwest).">
+            <span class="fh"><span>Direction</span><span class="val"><output for="lightAz"></output>°</span></span>
+            <input id="lightAz" type="range" min="0" max="359" step="1" value="315">
+          </label>
+          <label class="field" data-tip="How high the sun is. Low sun = long, dramatic shadows.">
+            <span class="fh"><span>Height</span><span class="val"><output for="lightAlt"></output>°</span></span>
+            <input id="lightAlt" type="range" min="5" max="85" step="1" value="35">
+          </label>
+        </div>
+        <div class="grid2">
+          <label class="field" data-tip="Brightness of direct sunlight.">
+            <span class="fh"><span>Sunlight</span><span class="val"><output for="lightPow"></output></span></span>
+            <input id="lightPow" type="range" min="0.5" max="5" step="0.1" value="2.4">
+          </label>
+          <label class="field" data-tip="Soft light from all around. Raise it to lighten shadows.">
+            <span class="fh"><span>Ambient</span><span class="val"><output for="lightAmb"></output></span></span>
+            <input id="lightAmb" type="range" min="0" max="3" step="0.05" value="1.1">
+          </label>
+        </div>
+        <label class="switch" data-tip="Real shadows cast by mountains and layers. Looks great with a fixed, low sun.">
+          <input id="castShadows" type="checkbox"><span>Cast shadows</span>
+        </label>
+        <label class="switch" data-tip="Let the block's shadow fall onto the floor beneath it.">
+          <input id="floorShadow" type="checkbox" checked><span>Shadow on the floor</span>
+        </label>
+      </div>
+
+      <div class="inset card">
+        <h3 class="dot-label">Camera</h3>
+        <label class="field" data-tip="Which side you look at the block from. You can also drag in the 3D view to orbit freely.">
+          <span class="fh"><span>View from</span></span>
+          <select id="view">
+            <option value="0">North</option>
+            <option value="45">Northeast</option>
+            <option value="90">East</option>
+            <option value="135">Southeast</option>
+            <option value="180">South</option>
+            <option value="200" selected>South (slightly west)</option>
+            <option value="225">Southwest</option>
+            <option value="270">West</option>
+            <option value="315">Northwest</option>
+          </select>
+        </label>
+        <label class="field" data-tip="How steeply you look down at the block.">
+          <span class="fh"><span>Viewing angle</span><span class="val"><output for="tilt"></output>°</span></span>
+          <input id="tilt" type="range" min="10" max="80" step="1" value="32">
+        </label>
+        <p class="note">In the 3D view: drag to orbit · right-drag to pan · scroll to zoom.</p>
+      </div>
+    </section>
+
+    <!-- 5 · Labels -->
+    <section class="step" data-step="labels">
+      <header class="step-head">
+        <span class="step-num">Step 5 of 8</span>
+        <h2>Labels &amp; borders</h2>
+        <p>Place names and borders come from OpenStreetMap after you build. Pick what to show, then fine-tune in the Labels list.</p>
+      </header>
+      <div class="inset card">
+        <h3 class="dot-label">Show names of</h3>
+        <label class="switch" data-tip="Countries, states and provinces."><input id="lblAdmin" type="checkbox" checked><span>States &amp; countries</span></label>
+        <label class="switch" data-tip="County (or equivalent) names."><input id="lblCounty" type="checkbox"><span>Counties</span></label>
+        <label class="switch" data-tip="Cities, towns and, for small areas, villages."><input id="lblCity" type="checkbox" checked><span>Cities &amp; towns</span></label>
+        <label class="switch" data-tip="Peaks, islands, peninsulas, ranges, glaciers and similar."><input id="lblFeature" type="checkbox" checked><span>Landforms &amp; peaks</span></label>
+        <label class="switch" data-tip="Seas, lakes, bays, straits and rivers."><input id="lblWater" type="checkbox" checked><span>Water</span></label>
+        <button id="openLabelList" class="btn sm block" data-tip="Open the full list to show, hide or force individual labels.">Open the labels list…</button>
+        <p id="osmInfo" class="note"></p>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Label style</h3>
+        <label class="field" data-tip="Serif capitals (classic atlas look) or a light sans-serif.">
+          <span class="fh"><span>Font</span></span>
+          <select id="lblFont" class="seg-select"><option value="serif">Serif caps</option><option value="sans">Light sans</option></select>
+        </label>
+        <label class="field" data-tip="Makes all labels bigger or smaller.">
+          <span class="fh"><span>Size</span><span class="val"><output for="lblSize"></output>×</span></span>
+          <input id="lblSize" type="range" min="0.5" max="2" step="0.05" value="1">
+        </label>
+        <label class="field" data-tip="How area names sit: flat on the land, tilted towards you, or standing upright.">
+          <span class="fh"><span>Orientation</span></span>
+          <select id="lblOrient">
+            <option value="flat" selected>Flat on the land</option>
+            <option value="60">Tilted 60°</option>
+            <option value="45">Tilted 45°</option>
+            <option value="30">Tilted 30°</option>
+            <option value="stand">Standing up</option>
+          </select>
+        </label>
+        <p class="note">Tip: drag any label in the 3D view to move it.</p>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Borders</h3>
+        <label class="switch" data-tip="National borders, as a solid line."><input id="bndCountry" type="checkbox"><span>Country</span></label>
+        <label class="switch" data-tip="State / province borders, as a dash-dot line."><input id="bndState" type="checkbox"><span>State / province</span></label>
+        <label class="switch" data-tip="County borders, as a dotted line."><input id="bndCounty" type="checkbox"><span>County</span></label>
+      </div>
+    </section>
+
+    <!-- 6 · Pins & shapes -->
+    <section class="step" data-step="layers">
+      <header class="step-head">
+        <span class="step-num">Step 6 of 8</span>
+        <h2>Pins &amp; shapes</h2>
+        <p>Add your own places, lines and areas. They're kept when you switch to a new area.</p>
+      </header>
+      <div class="inset card">
+        <h3 class="dot-label">Pins</h3>
+        <p class="note">Up to 5,000 places. Paste rows like <code>name,lat,lon</code> (colour, style and size are optional) or load a CSV.</p>
+        <textarea id="pinText" rows="4" spellcheck="false" placeholder="name,lat,lon,color&#10;Mackinac Bridge,45.8174,-84.7278,#ff4d4d&#10;Fort Mackinac,45.8507,-84.6170" data-tip="One place per line. Needs latitude and longitude; a header row lets you add name, color, style and size columns."></textarea>
+        <div class="btn-row">
+          <label class="file-btn btn sm" data-tip="Load a CSV or TSV file of places."><input id="pinFile" type="file" accept=".csv,.tsv,.txt"><span>Load CSV…</span></label>
+          <button id="btnPinClick" class="btn sm" data-tip="Then click on the map to drop pins.">Click to add</button>
+          <button id="btnPinClear" class="btn" data-tip="Remove all pins.">Clear</button>
+        </div>
+        <div class="grid2">
+          <label class="field" data-tip="Marker style for pins that don't set their own."><span class="fh"><span>Marker</span></span><select id="pinStyle"></select></label>
+          <label class="field color-field" data-tip="Colour for pins that don't set their own."><span class="fh"><span>Colour</span></span><input id="pinColor" type="color" value="#ff4d4d"></label>
+        </div>
+        <div id="pinImageRow" class="sub-controls" hidden>
+          <p class="note">A PNG with a transparent background works best: its outline is traced and extruded into a solid shape, with the picture on the front and back. Heads turn to face the camera.</p>
+          <div class="btn-row">
+            <label class="file-btn btn sm" data-tip="Choose a PNG (or WebP/GIF) with transparency. Only the opaque parts become the shape."><input id="pinImage" type="file" accept="image/png,image/webp,image/gif,image/svg+xml"><span>Load image…</span></label>
+          </div>
+          <p id="pinImageInfo" class="note">No image loaded yet: drop pins are used until you load one.</p>
+          <label class="field" data-tip="Image colours paints the picture on the faces. Pin colour makes a solid silhouette in each pin's colour.">
+            <span class="fh"><span>Head colours</span></span>
+            <select id="pinImageColours"><option value="image">Image colours</option><option value="solid">Pin colour (silhouette)</option></select>
+          </label>
+          <label class="field" data-tip="How thick the extruded shape is, relative to its size.">
+            <span class="fh"><span>Thickness</span><span class="val"><output for="pinImageDepth"></output></span></span>
+            <input id="pinImageDepth" type="range" min="0.03" max="0.6" step="0.01" value="0.15">
+          </label>
+          <label class="switch" data-tip="Raise the shape on a thin stem; off, it stands on the ground."><input id="pinImageStem" type="checkbox" checked><span>On a stem</span></label>
+        </div>
+        <label class="field" data-tip="Size of the markers.">
+          <span class="fh"><span>Marker size</span><span class="val"><output for="pinSize"></output></span></span>
+          <input id="pinSize" type="range" min="0.4" max="6" step="0.1" value="2.4">
+        </label>
+        <label class="switch" data-tip="Show each pin's name above it (first 150)."><input id="pinLabels" type="checkbox" checked><span>Show names</span></label>
+        <p id="pinInfo" class="note"></p>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Shapes &amp; lines</h3>
+        <p class="note">Load a shapefile (.zip, or .shp + .dbf + .prj together), GeoJSON, KML, KMZ or GPX — or draw one.</p>
+        <label class="file-btn btn block" data-tip="Choose one or more files. Shapefiles are reprojected using their .prj."><input id="ovFile" type="file" multiple accept=".zip,.shp,.dbf,.prj,.cpg,.geojson,.json,.kml,.kmz,.gpx"><span>Load shapes…</span></label>
+        <div class="btn-row">
+          <button id="btnDrawLine" class="btn sm" data-tip="Click points on the map; double-click or Enter to finish, Esc to cancel.">Draw a line</button>
+          <button id="btnDrawPoly" class="btn sm" data-tip="Click points on the map; double-click or Enter to finish, Esc to cancel.">Draw an area</button>
+        </div>
+        <p id="ovInfo" class="note"></p>
+        <div id="ovList"></div>
+      </div>
+    </section>
+
+    <!-- 7 · Layout -->
+    <section class="step" data-step="layout">
+      <header class="step-head">
+        <span class="step-num">Step 7 of 8</span>
+        <h2>Layout</h2>
+        <p>The words and map furniture around the diorama.</p>
+      </header>
+      <div class="inset card">
+        <h3 class="dot-label">Title</h3>
+        <label class="field" data-tip="Big spaced-out title across the image."><span class="fh"><span>Title</span></span><input id="title" type="text" value="" placeholder="e.g. The Straits of Mackinac"></label>
+        <label class="field" data-tip="Put the title at the top or the bottom of the image.">
+          <span class="fh"><span>Position</span></span>
+          <select id="titlePos" class="seg-select"><option value="top">Top</option><option value="bottom">Bottom</option></select>
+        </label>
+        <label class="field" data-tip="Very large, faint lettering behind the diorama — e.g. a region name."><span class="fh"><span>Background word</span></span><input id="descText" type="text" placeholder="e.g. GREAT LAKES"></label>
+        <details class="more">
+          <summary>Background word options</summary>
+          <label class="field" data-tip="Where the background word sits.">
+            <span class="fh"><span>Position</span></span>
+            <select id="descPos" class="seg-select"><option value="top">Top</option><option value="middle" selected>Middle</option><option value="bottom">Bottom</option></select>
+          </label>
+          <div class="grid2">
+            <label class="field" data-tip="How visible the background word is.">
+              <span class="fh"><span>Opacity</span><span class="val"><output for="descOpacity"></output></span></span>
+              <input id="descOpacity" type="range" min="0.02" max="0.4" step="0.01" value="0.08">
+            </label>
+            <label class="field" data-tip="Height of the background word.">
+              <span class="fh"><span>Size</span><span class="val"><output for="descSize"></output></span></span>
+              <input id="descSize" type="range" min="0.08" max="0.4" step="0.01" value="0.22">
+            </label>
+          </div>
+        </details>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Text on the block's sides</h3>
+        <div class="grid2">
+          <label class="field" data-tip="Lettering on the north-facing side."><span class="fh"><span>North side</span></span><input id="label_n" type="text"></label>
+          <label class="field" data-tip="Lettering on the east-facing side."><span class="fh"><span>East side</span></span><input id="label_e" type="text"></label>
+          <label class="field" data-tip="Lettering on the south-facing side."><span class="fh"><span>South side</span></span><input id="label_s" type="text"></label>
+          <label class="field" data-tip="Lettering on the west-facing side."><span class="fh"><span>West side</span></span><input id="label_w" type="text"></label>
+        </div>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Locator map</h3>
+        <label class="switch" data-tip="A small overview showing where the diorama is in the world."><input id="showLocator" type="checkbox" checked><span>Show locator</span></label>
+        <label class="switch" data-tip="Arrow showing which way you're looking."><input id="showArrow" type="checkbox" checked><span>Direction arrow</span></label>
+        <label class="field" data-tip="Corner map: a faded overview in a bottom corner. Globe: a small globe. Full side: a large map filling one side of the image, with water cut out so the backdrop shows through (the diorama moves over to make room).">
+          <span class="fh"><span>Style</span></span>
+          <select id="locatorStyle" class="seg-select"><option value="map" selected>Corner map</option><option value="globe">Globe</option><option value="side">Full side</option></select>
+        </label>
+        <label class="field" data-tip="Which side of the image the locator sits on.">
+          <span class="fh"><span>Side</span></span>
+          <select id="locatorSide" class="seg-select"><option value="left" selected>Left</option><option value="right">Right</option></select>
+        </label>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Compass &amp; scale</h3>
+        <label class="switch" data-tip="A compass rose lying on the diorama, pointing true north."><input id="compassOn" type="checkbox" checked><span>Compass rose</span></label>
+        <div class="grid2">
+          <label class="field" data-tip="Where the compass sits. Auto picks the corner at the top-left of the screen.">
+            <span class="fh"><span>Position</span></span>
+            <select id="compassPos">
+              <option value="auto" selected>Auto</option>
+              <option value="nw">NW corner</option>
+              <option value="ne">NE corner</option>
+              <option value="se">SE corner</option>
+              <option value="sw">SW corner</option>
+              <option value="ground">Beside block</option>
+            </select>
+          </label>
+          <label class="field color-field" data-tip="Colour of the compass."><span class="fh"><span>Colour</span></span><input id="compassColor" type="color" value="#ffffff"></label>
+          <label class="field" data-tip="Size of the compass.">
+            <span class="fh"><span>Size</span><span class="val"><output for="compassSize"></output></span></span>
+            <input id="compassSize" type="range" min="0.06" max="0.35" step="0.01" value="0.2">
+          </label>
+          <label class="field" data-tip="How visible the compass is.">
+            <span class="fh"><span>Opacity</span><span class="val"><output for="compassOpacity"></output></span></span>
+            <input id="compassOpacity" type="range" min="0.2" max="1" step="0.05" value="0.9">
+          </label>
+        </div>
+        <label class="field" data-tip="Where the credits and distance scale go. Auto: the bottom corner away from the locator. In a top corner the scale sits under the credits; in a bottom corner, above them.">
+          <span class="fh"><span>Credits &amp; scale corner</span></span>
+          <select id="creditsCorner">
+            <option value="auto" selected>Auto (away from locator)</option>
+            <option value="tl">Top left</option>
+            <option value="tr">Top right</option>
+            <option value="bl">Bottom left</option>
+            <option value="br">Bottom right</option>
+          </select>
+        </label>
+        <label class="field" data-tip="Distance scale next to the credits. Measured at the centre of the block, since perspective changes scale with depth.">
+          <span class="fh"><span>Distance scale</span></span>
+          <select id="scaleUnits">
+            <option value="both" selected>Kilometres + miles</option>
+            <option value="metric">Kilometres</option>
+            <option value="imperial">Miles</option>
+            <option value="off">Hide</option>
+          </select>
+        </label>
+      </div>
+      <div class="inset card">
+        <h3 class="dot-label">Backdrop &amp; credits</h3>
+        <label class="field" data-tip="Background of the rendered image: dark, or a light studio backdrop (pairs well with white topographic models).">
+          <span class="fh"><span>Image backdrop</span></span>
+          <select id="bgTheme" class="seg-select"><option value="dark" selected>Dark</option><option value="light">Light studio</option></select>
+        </label>
+        <label class="field" data-tip="Colour of place labels. Auto picks dark text on pale terrain.">
+          <span class="fh"><span>Label colour</span></span>
+          <select id="labelInk" class="seg-select"><option value="auto" selected>Auto</option><option value="light">White</option><option value="dark">Dark</option></select>
+        </label>
+        <label class="field" data-tip="Your name, added to the credits line."><span class="fh"><span>Made by</span></span><input id="cartographer" type="text" placeholder="Your name"></label>
+      </div>
+    </section>
+
+    <!-- 8 · Export -->
+    <section class="step" data-step="export">
+      <header class="step-head">
+        <span class="step-num">Step 8 of 8</span>
+        <h2>Export</h2>
+        <p>Save exactly what you see in the 3D view as a high-resolution image.</p>
+      </header>
+      <div class="inset card">
+        <label class="field" data-tip="Image size in pixels. 4K is good for screens and prints up to about A3.">
+          <span class="fh"><span>Image size</span></span>
+          <select id="exportSize">
+            <option value="1920x1080">1920 × 1080 · HD</option>
+            <option value="3840x2160" selected>3840 × 2160 · 4K</option>
+            <option value="5760x3240">5760 × 3240 · 6K</option>
+          </select>
+        </label>
+        <button id="btnExport" class="btn primary block wide" disabled data-tip="Render and download the PNG.">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Export PNG
+        </button>
+        <button id="btnExportTex" class="btn block" disabled data-tip="Download just the flat terrain texture (imagery, water colour and shading), e.g. for other 3D software.">Download terrain texture</button>
+      </div>
+    </section>
+
+    </div>
+    <footer class="step-nav">
+      <button id="stepPrev" class="btn sm">Back</button>
+      <div class="stages compact" id="stepDots"></div>
+      <button id="stepNext" class="btn sm light">Next</button>
+    </footer>
+  </aside>
+
+  <!-- ======================= Main view ======================= -->
+  <main id="viewport">
+      <div class="segmented on-photo view-switch" role="tablist" aria-label="View">
+        <button id="tabMap" class="active" data-tip="The map, where you choose the area."><svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Map</button>
+        <button id="tab3d" data-tip="The 3D diorama. Drag to orbit, right-drag to pan, scroll to zoom."><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M3 9v6l9 5 9-5V9"/></svg>3D view</button>
+      </div>
+
+      <div id="welcome" class="welcome">
+        <div class="hero-copy">
+          <span class="dot-label">Getting started</span>
+          <h1>Cut a piece of the Earth out of the map.</h1>
+          <p class="lead">Find a place, draw the area you want, and build a 3D cut-away diorama you can style, label and export.</p>
+        </div>
+        <div class="glass welcome-card">
+          <button class="icon-btn sm welcome-close" id="welcomeClose" data-tip="Hide this guide.">&#x2715;</button>
+          <ol class="how">
+            <li><b>1</b><span><b>Find a place</b> with the search bar, or try an example below.</span></li>
+            <li><b>2</b><span><b>Draw the area</b> &mdash; press <i>Draw area</i> in the panel, then drag on the map.</span></li>
+            <li><b>3</b><span><b>Build</b>, then style it, add labels and export an image.</span></li>
+          </ol>
+          <div class="hero-chips" id="welcomeChips"></div>
+        </div>
+      </div>
+
+      <div id="stageWrap" hidden>
+        <div id="stage">
+          <canvas id="locator"></canvas>
+          <canvas id="gl"></canvas>
+          <canvas id="overlay"></canvas>
+        </div>
+        <div id="stageEmpty" class="empty-state">
+          <svg class="big" viewBox="0 0 24 24"><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M3 9v6l9 5 9-5V9"/></svg>
+          <h3 class="dot-label">No diorama yet</h3>
+          <p>Choose an area on the map, then press <b>Build diorama</b>.</p>
+        </div>
+      </div>
+      <button id="lblPanelToggle" class="pill side-tab" hidden data-tip="Show, hide or force individual labels.">
+        <svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Labels
+      </button>
+      <aside id="lblPanel" class="flyout glass strong" hidden>
+        <div class="flyout-head">
+          <h2>Labels</h2>
+          <button id="lblPanelClose" class="icon-btn sm" data-tip="Close the list.">✕</button>
+        </div>
+        <input id="lblSearch" type="search" placeholder="Filter by name…">
+        <div class="btn-row">
+          <button id="lblResetAll" class="btn sm" data-tip="Undo all your show/hide choices.">Reset choices</button>
+          <button id="lblResetPos" class="btn sm" data-tip="Put every moved label back where it started.">Reset positions</button>
+        </div>
+        <p class="note">Tick to show, untick to hide (nothing replaces it). Ticking one that was left out forces it on. Drag labels in the 3D view to move them; <span class="moved-dot">●</span> marks moved labels and ↺ puts one back.</p>
+        <div id="lblList"></div>
+      </aside>
+  </main>
+  </div>
+  </div>
+
+  <div id="tooltip" role="tooltip"></div>
+
+  <script type="module" src="js/ui.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
