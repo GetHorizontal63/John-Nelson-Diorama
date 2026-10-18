@@ -12,6 +12,8 @@
 
 It runs entirely in your web browser. There is nothing to install apart from Python, and no accounts or API keys are needed.
 
+Project home: **https://github.com/GetHorizontal63/John-Nelson-Diorama** (also linked from the GitHub button at the top of the app).
+
 ---
 
 ## Contents
@@ -76,7 +78,7 @@ It runs entirely in your web browser. There is nothing to install apart from Pyt
 |:-:|---|---|
 | 1 | **Search** | Type a place name and press Enter or **Go**; the map flies there. |
 | 2 | **Status** | Shows what is happening. It pulses while working and turns **red** if something fails. |
-| 3 | **Theme** | Switches the app between dark and light. |
+| 3 | **GitHub and Theme** | The GitHub button opens the project's home page; the moon/sun button switches the app between dark and light. |
 | 4 | **Build diorama** | Downloads terrain, imagery and water for the area and builds the 3D model. |
 | 5 | **Export** | Saves the finished picture as a PNG. |
 | 6 | **Step icons** | The eight steps: Place, Detail, Terrain, Style, Labels, Pins & shapes, Layout, Export. Click any one to jump to it. |
@@ -343,6 +345,8 @@ Find your symptom below and follow the steps in order.
 | Labels | © OpenStreetMap contributors (ODbL), via [OpenFreeMap](https://openfreemap.org/) and the [Overpass API](https://overpass-api.de/) | credited in every export |
 | Rail lines | © OpenStreetMap contributors (ODbL), exported by the Humanitarian OpenStreetMap Team | covered by the OpenStreetMap credit |
 | Search | OpenStreetMap Nominatim | light, interactive use only |
+
+Every export also carries a small **Created with NOMAD Data** mark with the logo. It sits bottom-left, or bottom-right when the credits are bottom-left, and moves above a bottom title.
 
 ### Known limits
 

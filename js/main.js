@@ -4,7 +4,7 @@ import { SOURCES, pickZoom, fetchMosaic, lngLatToWorld, worldToLngLat, bboxSizeM
 import * as DEM from './dem.js';
 import { makeSurface, makeRockTexture, makeCausticTexture, makeShadowTexture, WALL_THEMES, drawBoundaries, tintedTheme } from './textures.js';
 import { buildDiorama } from './diorama.js';
-import { prepareLocator, drawLocator, drawBackground, drawTitle, drawDescriptor, drawScaleBar, prepareGlobe, drawGlobe, setOverlayTheme, prepareSideLocator, drawSideLocator } from './overlay.js';
+import { prepareLocator, drawLocator, drawBackground, drawTitle, drawDescriptor, drawScaleBar, prepareGlobe, drawGlobe, setOverlayTheme, prepareSideLocator, drawSideLocator, drawWatermark, logoReady } from './overlay.js';
 import { fetchFeatures, fetchGeometry, fetchAdminSamples } from './osm.js';
 import { fetchTileData } from './vtiles.js';
 import { buildCompass } from './compass.js';
@@ -392,6 +392,9 @@ const creditsCorner = () => {
   return checked('showLocator') && locatorSide() === 'right' ? 'bl' : 'br';
 };
 
+const watermarkCorner = () => (creditsCorner() === 'bl' ? 'br' : 'bl');
+logoReady.then(() => drawOverlays(true));
+
 // Full-side locator.
 async function ensureSideLocator() {
   const b = state.raw?.bbox;
@@ -489,6 +492,7 @@ function drawOverlays(force = false) {
     const frontTitle = $('titlePos').value === 'bottom' ? '' : $('title').value;
     const anchor = drawTitle(oc, overlayCanvas.width, overlayCanvas.height, frontTitle, credits(), $('titlePos').value, creditsCorner());
     drawScaleBar(oc, overlayCanvas.width, overlayCanvas.height, pxPerMeterAtCentre(overlayCanvas.width, overlayCanvas.height), $('scaleUnits').value, anchor);
+    drawWatermark(oc, overlayCanvas.width, overlayCanvas.height, watermarkCorner(), $('titlePos').value);
   }
 }
 for (const id of ['title', 'cartographer', 'titlePos', 'descText', 'descPos', 'descOpacity', 'descSize', 'showLocator', 'showArrow', 'scaleUnits', 'locatorStyle', 'locatorSide', 'creditsCorner']) {
@@ -1498,6 +1502,8 @@ $('btnExport').onclick = async () => {
 
   const anchor = drawTitle(ctx, W, H, $('titlePos').value === 'bottom' ? '' : $('title').value, credits(), $('titlePos').value, creditsCorner());
   drawScaleBar(ctx, W, H, pxPerMeter, $('scaleUnits').value, anchor);
+  await logoReady;
+  drawWatermark(ctx, W, H, watermarkCorner(), $('titlePos').value);
   download(out, `${slug()}-${W}x${H}.png`);
   status(`Exported ${W}×${H} PNG.`);
 };

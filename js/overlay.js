@@ -340,6 +340,51 @@ export function drawTitle(ctx, W, H, title, credits, position = 'top', corner = 
   return anchor;
 }
 
+// Watermark.
+const LOGO = new Image();
+LOGO.src = new URL('../img/logo.png', import.meta.url).href;
+export const logoReady = LOGO.decode().catch(() => {});
+
+export function drawWatermark(ctx, W, H, corner = 'bl', titlePos = 'top') {
+  const side = corner === 'br' ? 'right' : 'left';
+  const size = H * 0.034;
+  const gap = size * 0.32;
+  const bottom = titlePos === 'bottom' ? H * 0.875 : H - H * 0.02;
+  const top = bottom - size;
+  const small = Math.max(7, size * 0.3);
+  const big = Math.max(10, size * 0.46);
+  ctx.save();
+  ctx.font = `600 ${big}px "Raleway", "Helvetica Neue", Arial, sans-serif`;
+  const textW = Math.max(ctx.measureText('NOMAD Data').width, small * 7.5);
+  const x0 = side === 'left' ? W * 0.02 : W - W * 0.02 - size - gap - textW;
+  if (LOGO.complete && LOGO.naturalWidth) {
+    ctx.globalAlpha = 0.9;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(side === 'left' ? x0 + size / 2 : W - W * 0.02 - size / 2, top + size / 2, size / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(LOGO, side === 'left' ? x0 : W - W * 0.02 - size, top, size, size);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+  const tx = side === 'left' ? x0 + size + gap : W - W * 0.02 - size - gap;
+  const halo = INK === '255,255,255' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)';
+  const text = (str, weight, px, alpha, y) => {
+    ctx.font = `${weight} ${px}px "Raleway", "Helvetica Neue", Arial, sans-serif`;
+    ctx.lineWidth = px * 0.32;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = halo;
+    ctx.strokeText(str, tx, y);
+    ctx.fillStyle = `rgba(${INK},${alpha})`;
+    ctx.fillText(str, tx, y);
+  };
+  ctx.textAlign = side === 'left' ? 'left' : 'right';
+  ctx.textBaseline = 'alphabetic';
+  text('Created with', 400, small, 0.75, top + size * 0.4);
+  text('NOMAD Data', 600, big, 0.9, top + size * 0.92);
+  ctx.restore();
+}
+
 // Round scale-bar length.
 function nice(x) {
   const p = 10 ** Math.floor(Math.log10(x));
